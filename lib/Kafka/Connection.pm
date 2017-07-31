@@ -117,6 +117,7 @@ use Kafka::Internals qw(
     $APIKEY_APIVERSIONS
     $APIKEY_OFFSETCOMMIT
     $APIKEY_OFFSETFETCH
+    $APIKEY_LISTGROUPS
     $MAX_CORRELATIONID
     $MAX_INT32
     debug_level
@@ -143,6 +144,8 @@ use Kafka::Protocol qw(
     encode_find_coordinator_request
     encode_offsetcommit_request
     encode_offsetfetch_request
+    encode_listgroups_request
+    decode_listgroups_response
 );
 
 =head1 SYNOPSIS
@@ -232,6 +235,10 @@ my %protocol = (
     "$APIKEY_OFFSETFETCH"  => {
         decode                  => \&decode_offsetfetch_response,
         encode                  => \&encode_offsetfetch_request,
+    },
+    "$APIKEY_LISTGROUPS"  => {
+        decode                  => \&decode_listgroups_response,
+        encode                  => \&encode_listgroups_request,
     },
 );
 
@@ -860,7 +867,7 @@ sub receive_response_to_request {
                 next ATTEMPT;
             }
         } elsif ( $host_to_send_to eq 'group_coordinator') {
-            my $group_id = $request->{GroupId};
+            my $group_id = $request->{GroupId}//'';
             if ( !%{ $self->{_group_coordinators} } && defined $group_id) {
                 # first request
                 $self->_update_group_coordinators($group_id);
@@ -1055,6 +1062,23 @@ sub exists_topic_partition {
     }
 
     return exists $self->{_metadata}->{ $topic }->{ $partition };
+}
+
+=head3 C<listgroups()>
+
+Returns the groups defined on this broker.
+
+C<listgroups()> takes no arguments.
+
+=cut
+sub listgroups {
+    my ($self) = @_;
+    return $self->receive_response_to_request({
+        __send_to__               => 'group_coordinator',
+        ApiKey                    => $APIKEY_LISTGROUPS,
+        CorrelationId             => _get_CorrelationId(),
+        ClientId                  => $self->{ClientId},
+    });
 }
 
 =head3 C<close_connection( $server )>

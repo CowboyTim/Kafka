@@ -36,6 +36,8 @@ our @EXPORT_OK = qw(
     decode_find_coordinator_response
     encode_offsetcommit_request
     encode_offsetfetch_request
+    encode_listgroups_request
+    decode_listgroups_response
     _decode_MessageSet_template
     _decode_MessageSet_array
     _encode_MessageSet_array
@@ -92,6 +94,7 @@ use Kafka::Internals qw(
     $APIKEY_FINDCOORDINATOR
     $APIKEY_OFFSETCOMMIT
     $APIKEY_OFFSETFETCH
+    $APIKEY_LISTGROUPS
     $PRODUCER_ANY_OFFSET
     format_message
 );
@@ -1593,6 +1596,86 @@ sub decode_offsetcommit_response {
         push( @$topics_array, $topic);
     }
     return $OffsetCommit_Response;
+}
+
+# ListGroups Request -------------------------------------------------------------
+
+=head3 C<encode_listgroups_request( $ListGroupsRequest )>
+
+Encodes the argument and returns a reference to the encoded binary string
+representing a Request buffer.
+
+This function takes the following arguments:
+
+=over 3
+
+=item C<$ListGroupsRequest>
+
+C<$ListGroupsRequest> is a reference to the hash representing
+the structure of the ListGroups Request.t>).
+
+=back
+
+=cut
+$IMPLEMENTED_APIVERSIONS->{$APIKEY_LISTGROUPS} = 1;
+sub encode_listgroups_request {
+    my ($ListGroupsRequest) = @_;
+    _encode_request_header(my $request = {data => my $data = []}, $APIKEY_LISTGROUPS, $ListGroupsRequest);
+                                                                            # Size
+                                                                            # ApiKey
+                                                                            # ApiVersion
+                                                                            # CorrelationId
+                                                                            # ClientId
+
+    return pack($request->{template}, $request->{len}, @{$data});
+}
+
+# ListGroups Response -------------------------------------------------------------
+
+=head3 C<decode_listgroups_response( $bin_stream_ref )>
+
+Decodes the argument and returns a reference to the hash representing
+the structure of the LISTGROUPS Response.
+
+This function takes the following arguments:
+
+=over 3
+
+=item C<$bin_stream_ref>
+
+C<$bin_stream_ref> is a reference to the encoded Response buffer. The buffer
+must be a non-empty binary string.
+
+=back
+
+=cut
+sub decode_listgroups_response {
+    my ( $bin_stream_ref ) = @_;
+
+    my @data = unpack( qq{x[l]l>s>l>X[l]l>/(s>/as>/a)},
+                                             # x[l]                          # Size (skip)
+                                             # l>                            # CorrelationId
+                                             # s>                            # ErrorCode
+                                             # l>                            # groups array size
+                                             # X[l]
+                                             # l>/(                          # groups array
+                                             #    s>/a                       # GroupName
+                                             #    s>/a                       # ProtocolType
+                                             # )
+    , $$bin_stream_ref );
+
+    my $i = 0;
+    my $ListGroups_Response = {};
+
+    $ListGroups_Response->{CorrelationId} =  $data[ $i++ ];   #CorrelationId
+    $ListGroups_Response->{Error}         =  $data[ $i++ ];   #ErrorCode
+
+    my $groups_array = $ListGroups_Response->{groups} =  [];
+    my $groups_array_size =  $data[ $i++ ];     # topics array size
+    while($groups_array_size--){
+        push @{$groups_array}, $data[ $i++ ],   # TopicName
+    }
+    return $ListGroups_Response;
 }
 
 # OffsetFetch Request -------------------------------------------------------------
